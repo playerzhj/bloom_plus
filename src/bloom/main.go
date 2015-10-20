@@ -12,7 +12,6 @@ import (
 	"path/filepath"
 	"runtime/debug"
 	"strings"
-	"sync"
 
 	"github.com/DigDeeply/bloom"
 )
@@ -136,7 +135,6 @@ var port *int = flag.Int("p", 8080, "listen port")
 var bhMap = make(map[string]*bloom.BloomFilter)
 
 // 协程通信控制相关
-var wg sync.WaitGroup
 var msg chan *Msg
 
 // 协程通信数据结构体
@@ -162,19 +160,14 @@ func main() {
 
 	// 创建一个缓存长度为数组长度的channel
 	msg = make(chan *Msg, len(fileNameArr))
-	wg.Add(len(fileNameArr))
 
 	// 遍历数组文件，逐个初始化容器
 	for i := 0; i < len(fileNameArr); i++ {
 		go initBloom(fileNameArr[i])
 	}
 
-	// 等待所有的协程完成
-	log.Printf("Wait child processes start...")
-	wg.Wait()
-	log.Printf("Child processes completed!")
-
 	// channel中发送的值
+	log.Printf("Wait child processes start...")
 	for i := 1; i <= len(fileNameArr); i++ {
 		ret := <-msg
 		log.Print("Bloom filter of " + ret.Name + " infomation:")
@@ -186,6 +179,7 @@ func main() {
 			bhMap[ret.Name] = ret.BloomFilter
 		}
 	}
+	log.Printf("Child processes completed!")
 
 	http.HandleFunc("/status", safeHandler(statusHandler))
 	http.HandleFunc("/bloom", safeHandler(bloomHandler))
@@ -217,7 +211,6 @@ func initBloom(fileName string) {
 	ret := new(Msg)
 	defer func(ret *Msg) {
 		msg <- ret
-		wg.Done()
 	}(ret)
 
 	// 根据给出的filename读取里边的id值，即去掉后缀名的文件名字
